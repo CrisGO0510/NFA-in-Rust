@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
-use std::fmt;
 use std::process::Command;
 use std::rc::Rc;
 
@@ -14,25 +13,6 @@ struct Node {
     state: String,
     is_accept: bool,
     transitions: HashMap<char, Rc<RefCell<Node>>>,
-}
-
-impl fmt::Display for Node {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Iniciar el formato con el nombre de la estructura
-        write!(f, "Node {{\n")?;
-        // Escribir el campo state
-        write!(f, "    state: \"{}\",\n", self.state)?;
-        // Escribir el campo is_accept
-        write!(f, "    is_accept: {},\n", self.is_accept)?;
-        // Escribir las transiciones con un formato detallado
-        write!(f, "    transitions: {{\n")?;
-        for (key, value) in &self.transitions {
-            write!(f, "        '{}': \"{}\",\n", key, value.borrow().state)?;
-        }
-        // Cerrar la llave de transitions y Node
-        write!(f, "    }},\n")?;
-        write!(f, "}}") // Finalizar el formato
-    }
 }
 
 impl Node {
@@ -67,6 +47,13 @@ impl DFA {
         }
     }
 
+    /**
+     Valida si la palabra ingresada es aceptada por el autómata.
+        # Arguments
+        * `input` - La palabra a analizar.
+        # Returns
+        Retorna un `bool` que puede determinar si la palabra es aceptada o no por el autómata.
+    */
     fn run(&self, input: &str) -> bool {
         let mut current_state = self.start_state.clone();
 
@@ -78,13 +65,13 @@ impl DFA {
                     current_state = next;
                 }
                 None => {
-                    println!("No hay transición para el simbolo {}", c);
+                    println!("No hay transición para el símbolo {}", c);
                     return false;
                 }
             }
         }
 
-        // Check if the final state is an accept state
+        // Verificar si el estado final es de aceptación
         if current_state.borrow().is_accept {
             return true;
         }
@@ -92,6 +79,7 @@ impl DFA {
         return false;
     }
 
+    // Imprime el conjunto de estados
     fn print_states(&self) {
         print!("{{");
         let mut first = true;
@@ -105,14 +93,17 @@ impl DFA {
         print!("}}");
     }
 
+    // Imprime el alfabeto
     fn print_alphabet(&self) {
         print!("{:?}", self.alphabet);
     }
 
+    // Imprime el estado inicial
     fn print_start_state(&self) {
         print!("{}", self.start_state.borrow().state);
     }
 
+    // Imprime el conjunto de estados de aceptación
     fn print_accept_states(&self) {
         print!("{{");
         let mut first = true;
@@ -128,6 +119,7 @@ impl DFA {
         print!("}}");
     }
 
+    // Imprime la 5-tupla (Definición formal de un DFA)
     fn tupla(&self) {
         print!("A = <");
 
@@ -160,6 +152,11 @@ fn main() {
     println!("Gracias por usar el programa.");
 }
 
+/**
+ Función que crea el alfabeto del autómata.
+    # Returns
+    Retorna un `HashSet<char>` el cual representa mi conjunto de símbolos .
+*/
 fn create_alphabet() -> HashSet<char> {
     let mut alphabet = HashSet::new();
     let size: usize;
@@ -186,7 +183,7 @@ fn create_alphabet() -> HashSet<char> {
     let mut i = 0;
 
     while i < size {
-        println!("Ingrese el simbolo {}: ", i + 1);
+        println!("Ingrese el símbolo {}: ", i + 1);
         let mut input = String::new();
 
         if std::io::stdin().read_line(&mut input).is_err() {
@@ -205,13 +202,18 @@ fn create_alphabet() -> HashSet<char> {
         if alphabet.insert(symbol) {
             i += 1; // Solo incrementa i si el símbolo es válido y no está duplicado
         } else {
-            println!("El simbolo ya existe en el alfabeto.");
+            println!("El símbolo ya existe en el alfabeto.");
             // No se incrementa i si el símbolo ya existe en el alfabeto
         }
     }
     alphabet
 }
 
+/**
+ Función que crea mi conjunto de estados del autómata .
+    # Returns
+    Retorna un `Vec<Rc<RefCell<Node>>>` el cual representa mi conjunto de estados.
+*/
 fn create_states() -> Vec<Rc<RefCell<Node>>> {
     let mut states = Vec::new();
     let mut states_name: HashSet<String> = HashSet::new();
@@ -236,7 +238,6 @@ fn create_states() -> Vec<Rc<RefCell<Node>>> {
         let mut i: usize = 0;
 
         while i < size {
-            // for i in 0..size {
             println!("Ingrese el nombre del estado {}: ", i);
             input = String::new();
 
@@ -288,6 +289,12 @@ fn create_states() -> Vec<Rc<RefCell<Node>>> {
     states
 }
 
+/**
+ Crea las transiciones entre los nodos (estados) del autómata.
+    # Arguments
+    * `states` - Referencia al vector de nodos.
+    * `alphabet` - Referencia al alfabeto.
+*/
 fn create_transitions(states: &Vec<Rc<RefCell<Node>>>, alphabet: &HashSet<char>) {
     for state in states {
         for symbol in alphabet.clone().into_iter() {
@@ -295,7 +302,7 @@ fn create_transitions(states: &Vec<Rc<RefCell<Node>>>, alphabet: &HashSet<char>)
 
             loop {
                 println!(
-                    "Ingrese el estado al que se transiciona \"{}\" con el simbolo {}: ",
+                    "Ingrese el estado al que se transiciona \"{}\" con el símbolo {}: ",
                     state.borrow().state,
                     symbol
                 );
@@ -322,6 +329,13 @@ fn create_transitions(states: &Vec<Rc<RefCell<Node>>>, alphabet: &HashSet<char>)
     }
 }
 
+/**
+ Define mi estado inicial del autómata.
+    # Arguments
+    * `states` - Referencia al vector de nodos.
+    # Returns
+    Retorna un `Rc<RefCell<Node>>` que es el puntero al estado inicial.
+*/
 fn define_start_states(states: &Vec<Rc<RefCell<Node>>>) -> Rc<RefCell<Node>> {
     let mut input;
 
@@ -351,6 +365,7 @@ fn define_start_states(states: &Vec<Rc<RefCell<Node>>>) -> Rc<RefCell<Node>> {
     }
 }
 
+// Menú principal del programa.
 fn menu() {
     clear_console();
     println!("Cree un autómata finito determinista.\n");
@@ -359,7 +374,7 @@ fn menu() {
     loop {
         wait_for_keypress();
         clear_console();
-        println!("Automata Finito Determinista");
+        println!("Autómata Finito Determinista");
         println!("=============================");
         println!("1. Crear o reemplazar un nuevo autómata.");
         println!("2. Validar una palabra.");
@@ -419,6 +434,7 @@ fn menu() {
     }
 }
 
+// Función para limpiar la consola
 fn clear_console() {
     if cfg!(target_os = "windows") {
         Command::new("cmd")
@@ -432,6 +448,7 @@ fn clear_console() {
     }
 }
 
+// Función para esperar a que el usuario presione una tecla
 fn wait_for_keypress() {
     let mut input = String::new();
     println!("Presione enter para continuar...");
