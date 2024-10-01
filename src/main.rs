@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::process::Command;
 use std::rc::Rc;
 
-struct DFA {
+struct NFA {
     states: Vec<Rc<RefCell<Node>>>,
     alphabet: HashSet<char>,
     start_state: Rc<RefCell<Node>>,
@@ -12,7 +12,7 @@ struct DFA {
 struct Node {
     state: String,
     is_accept: bool,
-    transitions: HashMap<char, Rc<RefCell<Node>>>,
+    transitions: HashMap<char, Vec<Rc<RefCell<Node>>>>,
 }
 
 impl Node {
@@ -25,22 +25,29 @@ impl Node {
     }
 
     fn add_transition(node: &Rc<RefCell<Node>>, symbol: char, to: Rc<RefCell<Node>>) {
-        node.borrow_mut().transitions.insert(symbol, to);
+        node.borrow_mut()
+            .transitions
+            .entry(symbol)
+            .or_insert(Vec::new())
+            .push(to);
     }
 
-    fn next_state(&self, symbol: char) -> Option<Rc<RefCell<Node>>> {
-        self.transitions.get(&symbol).cloned()
+    fn next_states(&self, symbol: char) -> Vec<Rc<RefCell<Node>>> {
+        self.transitions
+            .get(&symbol)
+            .cloned()
+            .unwrap_or_else(Vec::new)
     }
 }
 
-impl DFA {
-    fn new() -> DFA {
+impl NFA {
+    fn new() -> NFA {
         let alphabet = create_alphabet();
         let states = create_states();
         create_transitions(&states, &alphabet);
         let start_state = define_start_states(&states);
 
-        DFA {
+        NFA {
             states,
             alphabet,
             start_state,
@@ -55,30 +62,53 @@ impl DFA {
         Retorna un `bool` que puede determinar si la palabra es aceptada o no por el autómata.
     */
     fn run(&self, input: &str) -> bool {
-        let mut current_state = self.start_state.clone();
-
+        let mut paths: Vec<Vec<Rc<RefCell<Node>>>> = vec![vec![self.start_state.clone()]];
+    
         for c in input.chars() {
-            let next_state = current_state.borrow().next_state(c);
-
-            match next_state {
-                Some(next) => {
-                    current_state = next;
+            let mut new_paths = Vec::new();
+    
+            for path in paths {
+                if let Some(last_state) = path.last() {
+                    let possible_states = last_state.borrow().next_states(c);
+    
+                    if possible_states.is_empty() {
+                        println!("No hay transición para el símbolo {}", c);
+                        continue;
+                    }
+    
+                    for next_state in possible_states {
+                        let mut new_path = path.clone();
+                        new_path.push(next_state.clone());
+                        new_paths.push(new_path);
+                    }
                 }
-                None => {
-                    println!("No hay transición para el símbolo {}", c);
-                    return false;
+            }
+    
+            if new_paths.is_empty() {
+                println!("No hay transiciones posibles para el símbolo {}", c);
+                return false;
+            }
+    
+            paths = new_paths;
+        }
+    
+        let mut is_accepted = false;
+        for path in &paths {
+            if let Some(last_state) = path.last() {
+                if last_state.borrow().is_accept {
+                    is_accepted = true;
+                    println!("Ruta aceptada: {:?}", path.iter().map(|s| s.borrow().state.clone()).collect::<Vec<_>>());
                 }
             }
         }
-
-        // Verificar si el estado final es de aceptación
-        if current_state.borrow().is_accept {
-            return true;
+    
+        if !is_accepted {
+            println!("La palabra no es aceptada por ninguna ruta.");
         }
-
-        return false;
+    
+        is_accepted
     }
-
+    
     // Imprime el conjunto de estados
     fn print_states(&self) {
         print!("{{");
@@ -119,7 +149,27 @@ impl DFA {
         print!("}}");
     }
 
-    // Imprime la 5-tupla (Definición formal de un DFA)
+    // Imprime las transiciones del autómata NFA
+    fn print_transitions(&self) {
+        for state in &self.states {
+            let state_borrow = state.borrow();
+            for (symbol, next_states) in &state_borrow.transitions {
+                let next_states_str: Vec<String> = next_states
+                    .iter()
+                    .map(|next_state| next_state.borrow().state.clone())
+                    .collect();
+
+                println!(
+                    "δ({}, {}) = [{}]",
+                    state_borrow.state,
+                    symbol,
+                    next_states_str.join(", ")
+                );
+            }
+        }
+    }
+
+    // Imprime la 5-tupla (Definición formal de un NFA)
     fn tupla(&self) {
         print!("A = <");
 
@@ -296,38 +346,100 @@ fn create_states() -> Vec<Rc<RefCell<Node>>> {
     * `alphabet` - Referencia al alfabeto.
 */
 fn create_transitions(states: &Vec<Rc<RefCell<Node>>>, alphabet: &HashSet<char>) {
-    for state in states {
-        for symbol in alphabet.clone().into_iter() {
-            let mut input;
+    loop {
+        // Solicitar al usuario el estado-símbolo-estados_destino
+        println!("Ingrese la transición en el formato \"(estado_actual, símbolo)->{{estados_destino}}\" (o escriba \"exit\" para salir):");
+        let mut input = String::new();
 
-            loop {
-                println!(
-                    "Ingrese el estado al que se transiciona \"{}\" con el símbolo {}: ",
-                    state.borrow().state,
-                    symbol
-                );
-                input = String::new();
+        if std::io::stdin().read_line(&mut input).is_err() {
+            println!("Error al leer la entrada.");
+            continue;
+        }
 
-                if std::io::stdin().read_line(&mut input).is_err() {
-                    println!("Error al leer la entrada.");
-                    continue;
-                }
+        let input = input.trim();
 
-                let next_state = states.iter().find(|&x| x.borrow().state == input.trim());
+        // Verificar si el usuario quiere salir
+        if input.to_lowercase() == "exit" {
+            break;
+        }
+
+        // Verificar el formato de la entrada
+        let parts: Vec<&str> = input.split("->").collect();
+        if parts.len() != 2 {
+            println!("Formato incorrecto. Debe ser \"(estado_actual, símbolo)->{{estados_destino}}\".");
+            continue;
+        }
+
+        let transition_part = parts[0].trim();
+        let next_states_input = parts[1].trim();
+
+        // Verificar que el formato de la parte de transición sea correcto (debe ser "(estado_actual, símbolo)")
+        if !transition_part.starts_with('(') || !transition_part.ends_with(')') {
+            println!("Formato incorrecto en la parte de transición. Debe ser \"(estado_actual, símbolo)\".");
+            continue;
+        }
+
+        // Remover los paréntesis y dividir por la coma
+        let transition_inner = &transition_part[1..transition_part.len() - 1];
+        let transition_parts: Vec<&str> = transition_inner.split(',').collect();
+
+        if transition_parts.len() != 2 {
+            println!("Formato incorrecto. Debe haber un estado y un símbolo separados por coma.");
+            continue;
+        }
+
+        let state_input = transition_parts[0].trim();
+        let symbol_input = transition_parts[1].trim();
+
+        // Verificar que el símbolo tenga un solo carácter
+        if symbol_input.len() != 1 {
+            println!("El símbolo debe ser un solo carácter.");
+            continue;
+        }
+
+        let symbol = symbol_input.chars().next().unwrap();
+
+        // Verificar que el símbolo pertenezca al alfabeto
+        if !alphabet.contains(&symbol) {
+            println!("El símbolo '{}' no pertenece al alfabeto.", symbol);
+            continue;
+        }
+
+        // Verificar que los estados destino estén entre llaves
+        if !next_states_input.starts_with('{') || !next_states_input.ends_with('}') {
+            println!("Formato incorrecto en los estados destino. Deben estar dentro de llaves \"{{estado1, estado2}}\".");
+            continue;
+        }
+
+        // Remover las llaves y dividir los estados destino por comas
+        let next_states_inner = &next_states_input[1..next_states_input.len() - 1];
+        let next_states: Vec<&str> = next_states_inner.split(',').map(|s| s.trim()).collect();
+
+        // Buscar el estado actual
+        let current_state = states.iter().find(|&x| x.borrow().state == state_input);
+
+        if let Some(current) = current_state {
+            // Buscar y agregar las transiciones para cada estado destino
+            for next_state_name in next_states {
+                let next_state = states.iter().find(|&x| x.borrow().state == next_state_name);
 
                 match next_state {
                     Some(next) => {
-                        Node::add_transition(&state, symbol, next.clone());
-                        break;
+                        // Agregar la transición a cada estado destino
+                        Node::add_transition(current, symbol, next.clone());
+                        println!("Transición agregada: δ({}, {}) = {}", state_input, symbol, next_state_name);
                     }
                     None => {
-                        println!("El estado no existe.");
+                        println!("El estado destino \"{}\" no existe.", next_state_name);
                     }
                 }
             }
+        } else {
+            println!("El estado \"{}\" no existe.", state_input);
         }
     }
 }
+
 
 /**
  Define mi estado inicial del autómata.
@@ -368,13 +480,13 @@ fn define_start_states(states: &Vec<Rc<RefCell<Node>>>) -> Rc<RefCell<Node>> {
 // Menú principal del programa.
 fn menu() {
     clear_console();
-    println!("Cree un autómata finito determinista.\n");
-    let mut dfa = DFA::new();
+    println!("Cree un autómata finito No determinista.\n");
+    let mut nfa = NFA::new();
 
     loop {
         wait_for_keypress();
         clear_console();
-        println!("Autómata Finito Determinista");
+        println!("Autómata Finito No Determinista");
         println!("=============================");
         println!("1. Crear o reemplazar un nuevo autómata.");
         println!("2. Validar una palabra.");
@@ -383,14 +495,15 @@ fn menu() {
         println!("5. Imprimir el estado inicial.");
         println!("6. Imprimir los conjuntos de aceptación.");
         println!("7. Imprimir las 5-tupla.");
-        println!("8. Salir del programa.\n");
+        println!("8. Imprimir las transiciones.");
+        println!("9. Salir del programa.\n");
 
         let mut choice = String::new();
         std::io::stdin().read_line(&mut choice).unwrap();
 
         match choice.trim() {
             "1" => {
-                dfa = DFA::new();
+                nfa = NFA::new();
                 println!("Nuevo autómata creado.");
             }
             "2" => {
@@ -398,7 +511,7 @@ fn menu() {
                 let mut input = String::new();
                 std::io::stdin().read_line(&mut input).unwrap();
                 let input = input.trim();
-                if dfa.run(input) {
+                if nfa.run(input) {
                     println!("La palabra es aceptada por el autómata.");
                 } else {
                     println!("La palabra es rechazada por el autómata.");
@@ -406,29 +519,33 @@ fn menu() {
             }
             "3" => {
                 println!("Conjunto de estados:");
-                dfa.print_states();
+                nfa.print_states();
                 println!();
             }
             "4" => {
                 println!("Alfabeto:");
-                dfa.print_alphabet();
+                nfa.print_alphabet();
                 println!();
             }
             "5" => {
                 println!("Estado inicial:");
-                dfa.print_start_state();
+                nfa.print_start_state();
                 println!();
             }
             "6" => {
                 println!("Conjuntos de aceptación:");
-                dfa.print_accept_states();
+                nfa.print_accept_states();
                 println!();
             }
             "7" => {
                 println!("Conjuntos de aceptación:");
-                dfa.tupla();
+                nfa.tupla();
             }
-            "8" => break,
+            "8" => {
+                println!("Transiciones:");
+                nfa.print_transitions();
+            }
+            "9" => break,
             _ => println!("Opción no válida, intente de nuevo."),
         }
     }
