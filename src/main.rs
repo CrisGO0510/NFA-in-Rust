@@ -138,7 +138,7 @@ impl NFA {
                     .collect();
 
                 println!(
-                    "δ({}, {}) = [{}]",
+                    "δ({}, {}) = {{{}}}",
                     state_borrow.state,
                     symbol,
                     next_states_str.join(", ")
