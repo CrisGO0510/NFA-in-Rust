@@ -62,53 +62,31 @@ impl NFA {
         Retorna un `bool` que puede determinar si la palabra es aceptada o no por el autómata.
     */
     fn run(&self, input: &str) -> bool {
-        let mut paths: Vec<Vec<Rc<RefCell<Node>>>> = vec![vec![self.start_state.clone()]];
-    
-        for c in input.chars() {
-            let mut new_paths = Vec::new();
-    
-            for path in paths {
-                if let Some(last_state) = path.last() {
-                    let possible_states = last_state.borrow().next_states(c);
-    
-                    if possible_states.is_empty() {
-                        println!("No hay transición para el símbolo {}", c);
-                        continue;
-                    }
-    
-                    for next_state in possible_states {
-                        let mut new_path = path.clone();
-                        new_path.push(next_state.clone());
-                        new_paths.push(new_path);
-                    }
-                }
-            }
-    
-            if new_paths.is_empty() {
-                println!("No hay transiciones posibles para el símbolo {}", c);
-                return false;
-            }
-    
-            paths = new_paths;
-        }
-    
-        let mut is_accepted = false;
-        for path in &paths {
-            if let Some(last_state) = path.last() {
-                if last_state.borrow().is_accept {
-                    is_accepted = true;
-                    println!("Ruta aceptada: {:?}", path.iter().map(|s| s.borrow().state.clone()).collect::<Vec<_>>());
-                }
-            }
-        }
-    
-        if !is_accepted {
-            println!("La palabra no es aceptada por ninguna ruta.");
-        }
-    
-        is_accepted
+        // println!("Recorrido: {} {}", self.start_state.borrow().state, input);
+        let last_node = NFA::backtracking(self.start_state.clone(), input);
+        
+        let is_accept = last_node.0.borrow().is_accept;
+        is_accept
     }
-    
+
+    fn backtracking(state: Rc<RefCell<Node>>, word: &str) -> (Rc<RefCell<Node>>, &str) {
+        let first_char = word.chars().next();
+
+        // println!("Recorrido recursivo: {} {}", state.borrow().state, word);
+
+        if let Some(first_char) = first_char {
+            for next_state in state.borrow().next_states(first_char) {
+                let (state, word) = Self::backtracking(next_state, &word[1..]);
+
+                if state.borrow().is_accept {
+                    return (state, word);
+                }
+            }
+        }
+
+        return (state, word);
+    }
+
     // Imprime el conjunto de estados
     fn print_states(&self) {
         print!("{{");
@@ -198,7 +176,6 @@ impl NFA {
 
 fn main() {
     menu();
-
     println!("Gracias por usar el programa.");
 }
 
@@ -366,7 +343,9 @@ fn create_transitions(states: &Vec<Rc<RefCell<Node>>>, alphabet: &HashSet<char>)
         // Verificar el formato de la entrada
         let parts: Vec<&str> = input.split("->").collect();
         if parts.len() != 2 {
-            println!("Formato incorrecto. Debe ser \"(estado_actual, símbolo)->{{estados_destino}}\".");
+            println!(
+                "Formato incorrecto. Debe ser \"(estado_actual, símbolo)->{{estados_destino}}\"."
+            );
             continue;
         }
 
@@ -427,7 +406,10 @@ fn create_transitions(states: &Vec<Rc<RefCell<Node>>>, alphabet: &HashSet<char>)
                     Some(next) => {
                         // Agregar la transición a cada estado destino
                         Node::add_transition(current, symbol, next.clone());
-                        println!("Transición agregada: δ({}, {}) = {}", state_input, symbol, next_state_name);
+                        println!(
+                            "Transición agregada: δ({}, {}) = {}",
+                            state_input, symbol, next_state_name
+                        );
                     }
                     None => {
                         println!("El estado destino \"{}\" no existe.", next_state_name);
@@ -439,7 +421,6 @@ fn create_transitions(states: &Vec<Rc<RefCell<Node>>>, alphabet: &HashSet<char>)
         }
     }
 }
-
 
 /**
  Define mi estado inicial del autómata.

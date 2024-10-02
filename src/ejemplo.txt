@@ -8,3 +8,41 @@
 
 https://d2jdgazzki9vjm.cloudfront.net/tutorial/automata/images/examples-of-nfa.png
 https://www.javatpoint.com/examples-of-non-deterministic-finite-automata
+
+Main ejemplo rapido:
+
+fn main() {
+    let alphabet: HashSet<char> = ['0', '1'].iter().cloned().collect();
+    let states: Vec<Rc<RefCell<Node>>> = vec![
+        Node::new("q0", false),
+        Node::new("q1", false),
+        Node::new("q2", false),
+        Node::new("q3", true),
+    ];
+
+    Node::add_transition(&states[0], '0', states[0].clone());
+    Node::add_transition(&states[0], '0', states[1].clone());
+
+    Node::add_transition(&states[0], '1', states[0].clone());
+    Node::add_transition(&states[0], '1', states[2].clone());
+
+    Node::add_transition(&states[1], '0', states[3].clone());
+
+    Node::add_transition(&states[2], '0', states[2].clone());
+    Node::add_transition(&states[2], '0', states[3].clone());
+
+    Node::add_transition(&states[2], '1', states[3].clone());
+
+    Node::add_transition(&states[3], '0', states[3].clone());
+    Node::add_transition(&states[3], '1', states[3].clone());
+
+    let mut nfa = NFA {
+        start_state: states[0].clone(),
+        states,
+        alphabet,
+    };
+
+    println!("{}", nfa.run("011"));
+
+    println!("Gracias por usar el programa.");
+}
