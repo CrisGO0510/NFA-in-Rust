@@ -41,6 +41,79 @@ impl Node {
 }
 
 impl NFA {
+    fn from_string(nfa_string: &str) -> Self {
+        let mut alphabet = HashSet::new();
+        let mut states: Vec<Rc<RefCell<Node>>> = Vec::new();
+        let mut start_state: Rc<RefCell<Node>> = Node::new("", false);
+        let mut final_states: Vec<Rc<RefCell<Node>>> = Vec::new();
+
+        // Procesar cada línea del string
+        for line in nfa_string.lines() {
+            let line = line.trim();
+
+            // Procesar el alfabeto
+            if line.starts_with("alphabet=") {
+                let chars = line
+                    .trim_start_matches("alphabet=")
+                    .replace("{", "")
+                    .replace("}", "");
+                for ch in chars.chars() {
+                    if ch != ',' && ch != ' ' {
+                        alphabet.insert(ch);
+                    }
+                }
+            }
+            // Procesar los estados
+            else if line.starts_with("state=") {
+                let state_str = line
+                    .trim_start_matches("state=")
+                    .replace("{", "")
+                    .replace("}", "");
+                for state in state_str.split(',') {
+                    states.push(Node::new(state.trim(), false));
+                }
+            }
+            // Procesar el estado inicial
+            else if line.starts_with("start_state=") {
+                start_state = states
+                    .iter()
+                    .find(|state| state.borrow().state == line.trim_start_matches("start_state="))
+                    .unwrap()
+                    .clone();
+            }
+            // Procesar los estados finales
+            else if line.starts_with("F=") {
+                let final_state_str = line
+                    .trim_start_matches("F=")
+                    .trim()
+                    .trim_matches(|c| c == '{' || c == '}');
+
+                // Convertir los nombres de los estados finales en un vector y filtrar los que existen
+                final_states.extend(final_state_str.split(',').filter_map(|state| {
+                    states
+                        .iter()
+                        .find(|s| s.borrow().state == state.trim())
+                        .cloned()
+                }));
+
+                // Marcar los estados finales como aceptados
+                for state in &final_states {
+                    state.borrow_mut().is_accept = true;
+                }
+            }
+            // Procesar las transiciones
+            else if line.starts_with("(") {
+                create_transitions_without_cli(&states, line);
+            }
+        }
+
+        NFA {
+            alphabet,
+            states,
+            start_state,
+        }
+    }
+
     fn new() -> NFA {
         let alphabet = create_alphabet();
         let states = create_states();
@@ -175,9 +248,30 @@ impl NFA {
 }
 
 fn main() {
-    menu();
+    let nfa_description = "
+        alphabet={0,1}
+        state={q0, q1, q2}
+        start_state=q0
+        F={q2}
+        (q0, 0)->{q0}
+        (q0, 1)->{q1}
+        (q1, 0)->{q1, q2}
+        (q1, 1)->{q1}
+        (q2, 0)->{q2}
+        (q2, 1)->{q1, q2}
+    ";
+
+    let nfa = NFA::from_string(nfa_description);
+
+    if nfa.run("0110") {
+        println!("La palabra es aceptada por el autómata.");
+    } else {
+        println!("La palabra es rechazada por el autómata.");
+    }
+
     println!("Gracias por usar el programa.");
 }
+
 
 /**
  Función que crea el alfabeto del autómata.
@@ -419,6 +513,55 @@ fn create_transitions(states: &Vec<Rc<RefCell<Node>>>, alphabet: &HashSet<char>)
         } else {
             println!("El estado \"{}\" no existe.", state_input);
         }
+    }
+}
+
+/**
+ Crea las transiciones entre los nodos (estados) del autómata sin nececidad del usuario.
+    # Arguments
+    * `states` - Referencia al vector de nodos.
+    * `input` - Referencia a un string generador.
+*/
+fn create_transitions_without_cli(states: &Vec<Rc<RefCell<Node>>>, input: &str) {
+    // Verificar el formato de la entrada
+    let parts: Vec<&str> = input.split("->").collect();
+
+    let transition_part = parts[0].trim();
+    let next_states_input = parts[1].trim();
+
+    // Remover los paréntesis y dividir por la coma
+    let transition_inner = &transition_part[1..transition_part.len() - 1];
+    let transition_parts: Vec<&str> = transition_inner.split(',').collect();
+
+    let state_input = transition_parts[0].trim();
+    let symbol_input = transition_parts[1].trim();
+
+    let symbol = symbol_input.chars().next().unwrap();
+
+    // Remover las llaves y dividir los estados destino por comas
+    let next_states_inner = &next_states_input[1..next_states_input.len() - 1];
+    let next_states: Vec<&str> = next_states_inner.split(',').map(|s| s.trim()).collect();
+
+    // Buscar el estado actual
+    let current_state = states.iter().find(|&x| x.borrow().state == state_input);
+
+    if let Some(current) = current_state {
+        // Buscar y agregar las transiciones para cada estado destino
+        for next_state_name in next_states {
+            let next_state = states.iter().find(|&x| x.borrow().state == next_state_name);
+
+            match next_state {
+                Some(next) => {
+                    // Agregar la transición a cada estado destino
+                    Node::add_transition(current, symbol, next.clone());
+                }
+                None => {
+                    println!("El estado destino \"{}\" no existe.", next_state_name);
+                }
+            }
+        }
+    } else {
+        panic!("El estado actual \"{}\" no existe.", state_input);
     }
 }
 
